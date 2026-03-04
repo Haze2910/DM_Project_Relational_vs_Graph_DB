@@ -10,7 +10,7 @@ def generate_scales():
     nutrients   = pd.read_parquet("data/nutrients_clean.parquet")
     has_ing     = pd.read_parquet("data/has_ingredient.parquet")
     has_nut     = pd.read_parquet("data/has_nutrient.parquet")
-
+    
     SCALES = [0.25, 0.50, 0.75, 1.0]
 
     for scale in SCALES:

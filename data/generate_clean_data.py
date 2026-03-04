@@ -24,7 +24,7 @@ def generate_clean_data():
     recipes = recipes.rename(columns={"id": "recipe_id"})
     nutrients = nutrients.rename(columns={"attr_id": "nutrient_id"})
 
-    # --- has_nutrient: explode full_nutrients ---
+    # --- has_nutrient ---
     if isinstance(ingredients["full_nutrients"].iloc[0], str):
         ingredients["full_nutrients"] = ingredients["full_nutrients"].apply(ast.literal_eval)
 
@@ -43,7 +43,7 @@ def generate_clean_data():
         has_nutrient["nutrient_id"].isin(valid_nutrient_ids) & (has_nutrient["amount"] > 0)
     ]
 
-    # --- has_ingredient: exact match ---
+    # --- has_ingredient ---
     if isinstance(recipes["ingredients"].iloc[0], str):
         recipes["ingredients"] = recipes["ingredients"].apply(ast.literal_eval)
 
