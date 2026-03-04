@@ -16,17 +16,15 @@ A benchmarking project comparing query performance between a **relational databa
 
 ### 1. Start the databases with Docker
 
-Spin up both PostgreSQL and Neo4j using Docker Compose:
+Run both PostgreSQL and Neo4j using Docker Compose:
 
 ```bash
 docker compose up -d
 ```
 
-Wait a few seconds for both services to be ready before proceeding.
-
 ### 2. Install Python dependencies
 
-**With `uv` (recommended):**
+**With `uv`:**
 
 ```bash
 uv sync
@@ -51,3 +49,25 @@ python main.py
 This will load the dataset into both databases, create the scales and execute the benchmark queries.
 
 ---
+
+## Viewing the Analysis Results
+
+After running the benchmark, you can explore the results interactively via the Jupyter notebook:
+
+### Option 1 — Jupyter Notebook
+
+```bash
+uv add jupyter       # or: pip install jupyter
+
+jupyter notebook analysis.ipynb
+```
+
+### Option 2 — JupyterLab
+
+```bash
+uv add jupyterlab    # or: pip install jupyterlab
+
+jupyter lab
+```
+
+Then open `analysis.ipynb`.
