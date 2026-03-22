@@ -83,25 +83,32 @@ QUERIES = [
         "params": {"recipe_id": None, "nutrient_id": None},
     },
     {
-        "id": "agg_top_ingredients_by_nutrient",
+        "id": "agg_avg_nutrient_per_recipe",
         "category": "aggregation",
-        "description": "Top 10 ingredients by average amount of a given nutrient",
+        "description": "Top 10 recipes by average nutrient amount across all ingredients and nutrients",
         "sql": """
-            SELECT i.name, AVG(hn.amount) AS avg_amount
-            FROM ingredient i
-            JOIN has_nutrient hn ON i.ingredient_id = hn.ingredient_id
-            WHERE hn.nutrient_id = %(nutrient_id)s
-            GROUP BY i.ingredient_id, i.name
-            ORDER BY avg_amount DESC
+            SELECT r.recipe_id, r.name,
+                AVG(hn.amount)                   AS avg_nutrient_amount,
+                COUNT(DISTINCT hi.ingredient_id) AS n_ingredients,
+                COUNT(DISTINCT hn.nutrient_id)   AS n_nutrients
+            FROM recipe r
+            JOIN has_ingredient hi ON r.recipe_id      = hi.recipe_id
+            JOIN has_nutrient   hn ON hi.ingredient_id = hn.ingredient_id
+            GROUP BY r.recipe_id, r.name
+            ORDER BY avg_nutrient_amount DESC
             LIMIT 10
         """,
         "cypher": """
-            MATCH (i:Ingredient)-[hn:HAS_NUTRIENT]->(n:Nutrient {nutrient_id: $nutrient_id})
-            RETURN i.name, avg(hn.amount) AS avg_amount
-            ORDER BY avg_amount DESC
+            MATCH (r:Recipe)-[:HAS_INGREDIENT]->(i:Ingredient)-[hn:HAS_NUTRIENT]->(n:Nutrient)
+            WHERE $scale IN r.scales
+            RETURN r.recipe_id, r.name,
+                avg(hn.amount)        AS avg_nutrient_amount,
+                count(DISTINCT i)     AS n_ingredients,
+                count(DISTINCT n)     AS n_nutrients
+            ORDER BY avg_nutrient_amount DESC
             LIMIT 10
         """,
-        "params": {"nutrient_id": None},
+        "params": {},
     },
     {
         "id": "agg_recipes_by_prep_time",
@@ -149,60 +156,66 @@ QUERIES = [
         "params": {},
     },
     {
-        "id": "mixed_subset_matching",
+        "id": "mixed_ingredient_cooccurrence",
         "category": "mixed",
-        "description": "Find recipes that contain all ingredients of a given recipe",
+        "description": "Top 10 ingredient pairs that co-occur most across recipes",
         "sql": """
-            SELECT r2.recipe_id, r2.name
-            FROM recipe r2
-            WHERE NOT EXISTS (
-                SELECT 1 FROM has_ingredient hi1
-                WHERE hi1.recipe_id = %(recipe_id)s
-                AND NOT EXISTS (
-                    SELECT 1 FROM has_ingredient hi2
-                    WHERE hi2.recipe_id     = r2.recipe_id
-                      AND hi2.ingredient_id = hi1.ingredient_id
-                )
-            )
-            AND r2.recipe_id != %(recipe_id)s
+            SELECT i1.name, i2.name, COUNT(DISTINCT hi1.recipe_id) AS co_occurrences
+            FROM has_ingredient hi1
+            JOIN has_ingredient hi2 ON hi1.recipe_id     = hi2.recipe_id
+                                    AND hi1.ingredient_id < hi2.ingredient_id
+            JOIN ingredient i1      ON hi1.ingredient_id = i1.ingredient_id
+            JOIN ingredient i2      ON hi2.ingredient_id = i2.ingredient_id
+            GROUP BY i1.ingredient_id, i1.name, i2.ingredient_id, i2.name
+            ORDER BY co_occurrences DESC
+            LIMIT 10
         """,
         "cypher": """
-            MATCH (r1:Recipe {recipe_id: $recipe_id})-[:HAS_INGREDIENT]->(i:Ingredient)
-            WHERE $scale IN r1.scales
-            WITH r1, collect(i) AS required_ingredients
-            MATCH (r2:Recipe)
-            WHERE $scale IN r2.scales AND r2.recipe_id <> $recipe_id
-            AND ALL(i IN required_ingredients WHERE (r2)-[:HAS_INGREDIENT]->(i))
-            RETURN r2.recipe_id, r2.name
+            MATCH (i1:Ingredient)<-[:HAS_INGREDIENT]-(r:Recipe)-[:HAS_INGREDIENT]->(i2:Ingredient)
+            WHERE $scale IN r.scales AND i1.ingredient_id < i2.ingredient_id
+            RETURN i1.name, i2.name, count(DISTINCT r) AS co_occurrences
+            ORDER BY co_occurrences DESC
+            LIMIT 10
         """,
-        "params": {"recipe_id": None},
+        "params": {},
     },
     {
-        "id": "mixed_nutritional_density",
+        "id": "mixed_recipes_above_avg_nutrient",
         "category": "mixed",
-        "description": "Top 10 recipes by average nutrient amount per ingredient (density)",
+        "description": "Recipes whose average nutrient amount exceeds the global average",
         "sql": """
-            SELECT r.recipe_id, r.name, 
-                AVG(hn.amount) AS avg_nutrient_amount,
-                COUNT(DISTINCT hi.ingredient_id) AS n_ingredients
+            WITH global_avg AS (
+                SELECT AVG(hn.amount) AS avg_amount
+                FROM has_ingredient hi
+                JOIN has_nutrient hn ON hi.ingredient_id = hn.ingredient_id
+            )
+            SELECT r.recipe_id, r.name, AVG(hn.amount) AS avg_nutrient_amount
             FROM recipe r
             JOIN has_ingredient hi ON r.recipe_id      = hi.recipe_id
             JOIN has_nutrient   hn ON hi.ingredient_id = hn.ingredient_id
             GROUP BY r.recipe_id, r.name
+            HAVING AVG(hn.amount) > (SELECT avg_amount FROM global_avg)
             ORDER BY avg_nutrient_amount DESC
             LIMIT 10
         """,
         "cypher": """
             MATCH (r:Recipe)-[:HAS_INGREDIENT]->(i:Ingredient)-[hn:HAS_NUTRIENT]->(n:Nutrient)
             WHERE $scale IN r.scales
-            RETURN r.recipe_id, r.name,
-                avg(hn.amount) AS avg_nutrient_amount,
-                count(DISTINCT i) AS n_ingredients
-            ORDER BY avg_nutrient_amount DESC
+            WITH avg(hn.amount) AS global_avg
+            MATCH (r2:Recipe)-[:HAS_INGREDIENT]->(i2:Ingredient)-[hn2:HAS_NUTRIENT]->(n2:Nutrient)
+            WHERE $scale IN r2.scales
+            WITH r2, avg(hn2.amount) AS avg_amount, global_avg
+            WHERE avg_amount > global_avg
+            RETURN r2.recipe_id, r2.name, avg_amount
+            ORDER BY avg_amount DESC
             LIMIT 10
         """,
         "params": {},
     },
+
+    # -------------------------------------------------------------------------
+    # VARIABLE LENGTH
+    # -------------------------------------------------------------------------
     {
         "id": "varlen_reachable_recipes",
         "category": "variable-length",
